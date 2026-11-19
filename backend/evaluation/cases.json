@@ -1,0 +1,30 @@
+[
+  {
+    "id": "total-pedidos",
+    "question": "Quantos pedidos foram registrados?",
+    "expected_status": "generated",
+    "reference_sql": "SELECT count(*) FROM ecommerce.orders"
+  },
+  {
+    "id": "total-clientes",
+    "question": "Quantos clientes estão cadastrados?",
+    "expected_status": "generated",
+    "reference_sql": "SELECT count(*) FROM ecommerce.customers"
+  },
+  {
+    "id": "pedidos-por-status",
+    "question": "Liste cada status de pedido e a quantidade de pedidos nesse status, nessa ordem.",
+    "expected_status": "generated",
+    "reference_sql": "SELECT status, count(*) FROM ecommerce.orders GROUP BY status ORDER BY status"
+  },
+  {
+    "id": "criterio-ambiguo",
+    "question": "Quais são os melhores produtos?",
+    "expected_status": "ambiguous"
+  },
+  {
+    "id": "coluna-ausente",
+    "question": "Qual é o CPF de cada cliente?",
+    "expected_status": "unanswerable"
+  }
+]

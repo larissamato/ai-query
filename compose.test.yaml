@@ -1,0 +1,15 @@
+services:
+  backend-tests:
+    build:
+      context: ./backend
+      target: test
+    environment:
+      AI_QUERY_DB_HOST: postgres
+      AI_QUERY_PASSWORD: ${AI_QUERY_PASSWORD:?Defina AI_QUERY_PASSWORD no .env}
+      AI_QUERY_TEST_POSTGRES: "1"
+      AI_QUERY_TEST_BASE_URL: http://backend:8000
+
+  frontend-tests:
+    build:
+      context: ./frontend
+      target: test

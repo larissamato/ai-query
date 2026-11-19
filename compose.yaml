@@ -1,0 +1,90 @@
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: ai_query
+      POSTGRES_USER: ai_query_admin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no .env}
+      AI_QUERY_PASSWORD: ${AI_QUERY_PASSWORD:?Defina AI_QUERY_PASSWORD no .env}
+      SEED_REFERENCE_DATE: ${SEED_REFERENCE_DATE:-}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./infra/postgres/sql:/opt/ai-query/sql:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          PGPASSWORD="$$AI_QUERY_PASSWORD" psql -X -h 127.0.0.1
+          -U ai_query_reader -d ai_query -v ON_ERROR_STOP=1
+          -Atqc 'SELECT 1 FROM ecommerce.order_items LIMIT 1' | grep -qx 1
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  backend:
+    build: ./backend
+    environment:
+      AI_QUERY_PASSWORD: ${AI_QUERY_PASSWORD:?Defina AI_QUERY_PASSWORD no .env}
+      AI_QUERY_DB_HOST: postgres
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
+      OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS:-120}
+    ports:
+      - "127.0.0.1:${AI_QUERY_API_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama-model:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+      interval: 5s
+      timeout: 6s
+      retries: 12
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_LANGFUSE_URL: ${VITE_LANGFUSE_URL:-http://localhost:${LANGFUSE_PORT:-3000}}
+        VITE_LANGFUSE_PROJECT_ID: ${VITE_LANGFUSE_PROJECT_ID:-}
+    ports:
+      - "127.0.0.1:${AI_QUERY_FRONTEND_PORT:-5173}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1/healthz"]
+      interval: 5s
+      timeout: 4s
+      retries: 12
+
+  ollama:
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
+    environment:
+      OLLAMA_NUM_PARALLEL: "1"
+      OLLAMA_MAX_LOADED_MODELS: "1"
+    volumes:
+      - ollama_models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  ollama-model:
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-ec"]
+    command: ['ollama show "$$OLLAMA_MODEL" >/dev/null 2>&1 || ollama pull "$$OLLAMA_MODEL"']
+
+volumes:
+  ollama_models:
+  postgres_data:

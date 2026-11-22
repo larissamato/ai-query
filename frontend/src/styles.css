@@ -185,3 +185,54 @@ button, textarea { font: inherit; }
   .submit-field kbd { display: none; }
   .output .ant-tabs-tab + .ant-tabs-tab { margin-inline-start: 14px; }
 }
+
+.page-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.evaluation-page {
+  display: grid;
+  gap: 16px;
+}
+
+.evaluation-controls,
+.evaluation-comparison {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.evaluation-controls label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.evaluation-comparison section {
+  min-width: 0;
+}
+
+.evaluation-details pre {
+  overflow: auto;
+  max-height: 18rem;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.evaluation-page .ant-alert {
+  margin-top: 12px;
+}
+
+@media (max-width: 720px) {
+  .topbar {
+    flex-wrap: wrap;
+  }
+
+  .page-nav {
+    order: 1;
+    flex-basis: 100%;
+  }
+}

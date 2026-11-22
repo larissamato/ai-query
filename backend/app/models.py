@@ -109,3 +109,9 @@ class QueryResponse(BaseModel):
     generation: GenerateResponse | None = None
     result: QueryResult | None = None
     prompt: list[PromptMessage] | None = None
+
+
+class EvaluationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mode: Literal["dynamic", "scientific"] = "dynamic"
+    model: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]

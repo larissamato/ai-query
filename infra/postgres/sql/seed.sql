@@ -1,3 +1,4 @@
+-- Versão ecommerce-v1. Altere a versão ao modificar a geração dos dados.
 \getenv reference_date SEED_REFERENCE_DATE
 SELECT COALESCE(
     NULLIF(:'reference_date', '')::date,

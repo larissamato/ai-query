@@ -89,3 +89,42 @@ export interface HistoryEntry {
   time: string
   status: 'ok' | 'failed' | 'ambiguous' | 'unanswerable'
 }
+
+export interface EvaluationCase {
+  id: string
+  category: string
+  complexity: string
+  question: string
+  concept: string
+  reference_sql: string | null
+  expected_status: Generation['status']
+  operator?: string
+  ordered?: boolean
+  aliases?: boolean
+}
+
+export type EvaluationMode = 'dynamic' | 'scientific'
+
+export interface EvaluationCatalog {
+  cases: EvaluationCase[]
+  dataset_sha256: string
+  scientific: { reference_date: string; seed_version: string; snapshot_sha256: string } | null
+}
+
+export interface EvaluationAttempt extends QueryResponse {
+  case: EvaluationCase
+  dataset_sha256: string
+  snapshot_sha256: string
+  mode: EvaluationMode
+  reference_date: string | null
+  seed_version: string | null
+  model_digest: string | null
+  generation_config: Record<string, unknown> | null
+  insufficient_data_reason: string | null
+  model_requested: string
+  expected_result: QueryResult | null
+  usage: { input_tokens: number | null; output_tokens: number | null }
+  outcome: 'insufficient_data' | 'correct' | 'sql_rejected' | 'error' | 'classification_mismatch' | 'result_mismatch' | 'operator_mismatch'
+  latency_ms: number
+  http_status: number
+}

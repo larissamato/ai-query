@@ -3,7 +3,7 @@ import { defineConfig, loadEnv } from 'vite'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'AI_QUERY_')
-  const target = env.AI_QUERY_API_TARGET || 'http://127.0.0.1:8000'
+  const target = process.env.AI_QUERY_API_TARGET || env.AI_QUERY_API_TARGET || 'http://127.0.0.1:8000'
   return {
     plugins: [react()],
     server: { host: '127.0.0.1', proxy: { '/api': target } },

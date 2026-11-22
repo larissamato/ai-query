@@ -1,5 +1,5 @@
 import { stageNames } from './types'
-import type { Models, QueryResponse, Schema, StageEvent, StreamResult } from './types'
+import type { EvaluationAttempt, EvaluationCatalog, EvaluationMode, Models, QueryResponse, Schema, StageEvent, StreamResult } from './types'
 
 function record(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null ? value as Record<string, unknown> : undefined
@@ -89,4 +89,18 @@ export async function streamQuery(
     void reader.cancel().catch(() => undefined)
     reader.releaseLock()
   }
+}
+
+export const getEvaluationCases = (signal: AbortSignal) =>
+  get<EvaluationCatalog>('/api/evaluation/cases', signal)
+
+export async function runEvaluationCase(id: string, model: string, mode: EvaluationMode, signal: AbortSignal): Promise<EvaluationAttempt> {
+  const response = await fetch(`/api/evaluation/cases/${encodeURIComponent(id)}/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model, mode }),
+    signal,
+  })
+  await ensureSuccess(response)
+  return await response.json() as EvaluationAttempt
 }

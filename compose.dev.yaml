@@ -1,0 +1,22 @@
+services:
+  backend:
+    command: ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--reload"]
+    volumes:
+      - ./backend/app:/app/app:ro
+      - ./backend/evaluation:/app/evaluation:ro
+
+  frontend:
+    image: ${COMPOSE_PROJECT_NAME}-frontend-dev
+    build:
+      target: dependencies
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "80", "--strictPort"]
+    environment:
+      AI_QUERY_API_TARGET: http://backend:8000
+      VITE_LANGFUSE_URL: ${VITE_LANGFUSE_URL:-http://localhost:${LANGFUSE_PORT:-3000}}
+      VITE_LANGFUSE_PROJECT_ID: ${VITE_LANGFUSE_PROJECT_ID:-}
+    volumes:
+      - ./frontend/src:/app/src:ro
+      - ./frontend/index.html:/app/index.html:ro
+      - ./frontend/vite.config.ts:/app/vite.config.ts:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1/"]

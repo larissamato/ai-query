@@ -70,7 +70,7 @@ def execute_query(database: Database, approved_sql: str) -> QueryResult:
 
 def run_query(
     database: Database, generator: TextToSQL, question: str, trace: Trace, *, execute: bool = True,
-    include_prompt: bool = False,
+    include_prompt: bool = False, experimental: bool = False,
 ) -> tuple[int, QueryResponse]:
     catalog_stage = QueryStage(name="catalog")
     generation_stage = QueryStage(name="generation")
@@ -106,7 +106,7 @@ def run_query(
 
         stage = validation_stage
         with measure(stage, trace, sql_chars=len(response.generation.sql)) as observation:
-            approved_sql = validate_sql(response.generation.sql, catalog)
+            approved_sql = validate_sql(response.generation.sql, catalog, experimental=experimental)
             observation.output["approved"] = True
 
         stage = execution_stage

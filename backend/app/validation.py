@@ -51,7 +51,11 @@ class ReadOnlyParser(Postgres.Parser):
         raise SQLRejected("Comando SQL fora da lista permitida.")
 
 
-def validate_sql(candidate: str, catalog: SchemaResponse) -> str:
+SET_QUERIES = (exp.Union, exp.Intersect, exp.Except)
+EVALUATION_NODES = {*SET_QUERIES, exp.Any, exp.All}
+
+
+def validate_sql(candidate: str, catalog: SchemaResponse, *, experimental: bool = False) -> str:
     """Return only PostgreSQL rendered from the approved AST, with a row cap."""
     if len(candidate) > MAX_SQL_LENGTH:
         raise SQLRejected("O SQL excede o tamanho permitido.")
@@ -60,12 +64,16 @@ def validate_sql(candidate: str, catalog: SchemaResponse) -> str:
         dialect = Postgres()
         parser = ReadOnlyParser(dialect=dialect, error_level=ErrorLevel.RAISE)
         statements = parser.parse(dialect.tokenize(candidate), candidate)
-        if len(statements) != 1 or type(statements[0]) is not exp.Select:
+        query_types = (exp.Select, *SET_QUERIES) if experimental else (exp.Select,)
+        allowed = ALLOWED_NODES | ALLOWED_FUNCTIONS
+        if experimental:
+            allowed |= EVALUATION_NODES
+        if len(statements) != 1 or type(statements[0]) not in query_types:
             raise SQLRejected("Apenas uma instrução SELECT é permitida.")
 
         query = normalize_identifiers(statements[0], dialect="postgres")
         for node in query.walk():
-            if type(node) not in ALLOWED_NODES and type(node) not in ALLOWED_FUNCTIONS:
+            if type(node) not in allowed:
                 raise SQLRejected("Construção SQL ou função fora da lista permitida.")
             if isinstance(node, exp.With) and node.args.get("recursive"):
                 raise SQLRejected("CTEs recursivas não são permitidas.")
@@ -78,7 +86,14 @@ def validate_sql(candidate: str, catalog: SchemaResponse) -> str:
                 raise SQLRejected("Unidade temporal fora da lista permitida.")
             if isinstance(node, exp.If) and not isinstance(node.parent, exp.Case):
                 raise SQLRejected("Use CASE para expressões condicionais.")
-            if isinstance(node, (exp.CTE, exp.Subquery)) and type(node.this) is not exp.Select:
+            if isinstance(node, SET_QUERIES) and any(
+                type(branch) not in (*query_types, exp.Subquery)
+                for branch in (node.this, node.expression)
+            ):
+                raise SQLRejected("Operações de conjunto exigem consultas SELECT.")
+            if isinstance(node, (exp.Any, exp.All)) and type(node.this) not in (*query_types, exp.Subquery):
+                raise SQLRejected("ANY e ALL exigem uma subconsulta SELECT.")
+            if isinstance(node, (exp.CTE, exp.Subquery)) and type(node.this) not in query_types:
                 raise SQLRejected("CTEs e subconsultas devem conter SELECT.")
 
         visible = {table.name for table in catalog.tables}.intersection(ALLOWED_TABLES)

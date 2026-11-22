@@ -1,7 +1,8 @@
 import { CodeOutlined } from '@ant-design/icons'
-import { Alert } from 'antd'
+import { Alert, Button } from 'antd'
 import { useEffect, useRef, useState } from 'react'
 import { getModels, getSchema, streamQuery } from './api'
+import { Evaluation } from './components/Evaluation'
 import { Processing } from './components/Processing'
 import { QueryInput } from './components/QueryInput'
 import { QueryOutput } from './components/QueryOutput'
@@ -45,6 +46,8 @@ function useResource<T>(load: (signal: AbortSignal) => Promise<T>) {
 export default function App() {
   const schema = useResource(getSchema)
   const models = useResource(getModels)
+  const [page, setPage] = useState("playground")
+  const [evaluationOpened, setEvaluationOpened] = useState(false)
   const [question, setQuestion] = useState('')
   const [model, setModel] = useState<string>()
   const [running, setRunning] = useState(false)
@@ -128,12 +131,22 @@ export default function App() {
     <>
       <header className="topbar">
         <div className="brand"><span className="brand-mark"><CodeOutlined /></span><span>AI Query <strong>Playground</strong></span></div>
+        <nav className="page-nav" aria-label="Navegação principal">
+          <Button type={page === 'playground' ? 'primary' : 'text'} onClick={() => setPage('playground')}>Playground</Button>
+          <Button type={page === 'evaluation' ? 'primary' : 'text'} onClick={() => {
+            setEvaluationOpened(true)
+            setPage('evaluation')
+          }}>Avaliação Experimental</Button>
+        </nav>
         <div className="connection" role="status">
           <i data-state={schema.data ? 'online' : schema.error ? 'offline' : 'pending'} />
           {schema.data ? 'PostgreSQL conectado' : schema.error ? 'Conexão indisponível' : 'Conectando ao PostgreSQL'}
         </div>
       </header>
-      <main className="app-shell">
+      {evaluationOpened && <div hidden={page !== 'evaluation'}>
+        <Evaluation models={models.data} modelError={models.error} retryModels={models.retry} />
+      </div>}
+      <main className="app-shell" hidden={page !== 'playground'}>
         <div className="page-heading">
           <h1>Query Playground</h1>
           <p>De linguagem natural a SQL. Acompanhe cada etapa da consulta.</p>

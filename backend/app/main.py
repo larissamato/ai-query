@@ -4,6 +4,7 @@ import logging
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from functools import partial
+from time import perf_counter
 from typing import Annotated
 
 import anyio
@@ -11,6 +12,13 @@ import psycopg
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import ValidationError
+
+from evaluation.experimental import (
+    CASES, DATASET_SHA256, SnapshotDatabase, dynamic_reference, frozen_references, grade,
+    load_reference, snapshot_digest,
+)
+
+from evaluation.snapshot import describe
 
 from .catalog import read_catalog
 from .config import get_settings
@@ -20,7 +28,7 @@ from .instrumentation import EventSink, StageEvent, Trace
 from .langfuse import configured_exporter
 from .llm import LLMError, OllamaProvider
 from .models import (
-    ErrorResponse, GenerateRequest, GenerateResponse, HealthResponse, ModelsResponse, QueryRequest, QueryResponse,
+    ErrorResponse, EvaluationRequest, GenerateRequest, GenerateResponse, HealthResponse, ModelsResponse, QueryRequest, QueryResponse,
     SchemaResponse,
 )
 from .query import run_query
@@ -246,3 +254,104 @@ async def stream_query(
         events(), media_type="text/event-stream",
         headers={"Cache-Control": "no-cache, no-store", "X-Accel-Buffering": "no", "X-Trace-Id": trace.id},
     )
+
+
+def scientific_manifest(path):
+    try:
+        return frozen_references(path)
+    except (OSError, ValueError, RuntimeError):
+        raise HTTPException(503, "Manifesto do snapshot científico indisponível ou inválido.") from None
+
+
+@app.get("/api/evaluation/cases")
+def evaluation_cases(database: DatabaseDependency):
+    try:
+        manifest = scientific_manifest(database.settings.evaluation_snapshot_path)
+        scientific = {key: manifest[key] for key in ("reference_date", "seed_version", "snapshot_sha256")}
+    except HTTPException:
+        scientific = None
+    return {"cases": list(CASES.values()), "dataset_sha256": DATASET_SHA256, "scientific": scientific}
+
+
+@app.get("/api/evaluation/snapshot")
+def evaluation_snapshot(database: DatabaseDependency) -> JSONResponse:
+    scientific_manifest(database.settings.evaluation_snapshot_path)
+    return JSONResponse(describe(database), headers={"Cache-Control": "no-store"})
+
+
+@app.post("/api/evaluation/cases/{case_id}/run")
+def run_evaluation(
+    case_id: str, request: EvaluationRequest, database: DatabaseDependency,
+    generator: GeneratorDependency, http: Request,
+) -> JSONResponse:
+    case = CASES.get(case_id)
+    if case is None:
+        raise HTTPException(404, "Caso experimental inexistente.")
+    path = database.settings.evaluation_snapshot_path
+    manifest = scientific_manifest(path) if request.mode == "scientific" else None
+    trace = create_trace(http, "evaluation.run")
+    started = perf_counter()
+    with database.connect() as connection:
+        fingerprint = snapshot_digest(connection)
+        if manifest and fingerprint != manifest["snapshot_sha256"]:
+            reference_date = manifest["reference_date"]
+            raise HTTPException(409, f"Snapshot diferente do esperado. Use a seed com data de referência {reference_date}.")
+        reader = SnapshotDatabase(database, connection)
+        generator = select_generator(generator, request.model)
+        provider = generator.provider
+        generation_config = None
+        model_digest = None
+        if isinstance(provider, OllamaProvider):
+            if manifest:
+                provider.generation_config = {
+                    **provider.generation_config,
+                    "options": {**provider.generation_config["options"], "seed": 42},
+                }
+            generation_config = provider.generation_config
+            model_digest = provider.model_digest
+        with trace.observe(
+            trace.operation, case_id=case_id, mode=request.mode, dataset_sha256=DATASET_SHA256,
+            snapshot_sha256=fingerprint, model_requested=request.model,
+        ) as root:
+            if manifest:
+                root.output.update(reference_date=manifest["reference_date"], seed_version=manifest["seed_version"])
+            if generation_config:
+                root.output.update(generation_config=json.dumps(generation_config, sort_keys=True))
+            if model_digest:
+                root.output.update(model_digest=model_digest)
+            reason = None
+            if manifest:
+                _, expected = load_reference(case_id, path)
+            else:
+                with trace.observe("evaluation.reference"):
+                    expected, reason = dynamic_reference(case, reader)
+            status, response = run_query(reader, generator, case["question"], trace, experimental=True)
+            outcome = grade(case, expected, response, status)
+            if reason and outcome in {"correct", "result_mismatch", "operator_mismatch"}:
+                outcome = "insufficient_data"
+            root.output.update(outcome=outcome, http_status=status)
+            if status >= 400:
+                root.error = next((item.error for item in reversed(trace.observations) if item.error), "query_failed")
+    elapsed = round((perf_counter() - started) * 1000, 2)
+    generation = next((item for item in trace.observations if item.name == "generation"), None)
+    return JSONResponse(content={
+        "case": case,
+        "dataset_sha256": DATASET_SHA256,
+        "snapshot_sha256": fingerprint,
+        "mode": request.mode,
+        "reference_date": manifest["reference_date"] if manifest else None,
+        "seed_version": manifest["seed_version"] if manifest else None,
+        "model_digest": model_digest,
+        "generation_config": generation_config,
+        "insufficient_data_reason": reason,
+        "model_requested": request.model,
+        "expected_result": expected.model_dump(mode="json") if expected is not None else None,
+        "outcome": outcome,
+        "http_status": status,
+        "latency_ms": elapsed,
+        "usage": {
+            "input_tokens": generation.usage.get("input") if generation else None,
+            "output_tokens": generation.usage.get("output") if generation else None,
+        },
+        **json.loads(response.model_dump_json()),
+    }, headers={"Cache-Control": "no-store", "X-Trace-Id": trace.id})

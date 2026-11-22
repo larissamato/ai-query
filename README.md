@@ -69,14 +69,29 @@ Use o mesmo nome de projeto e `ENV_FILE` nos comandos seguintes desse ambiente. 
 | `make logs` | Acompanha os logs. Use `make logs LOG_SERVICES="backend frontend"` para filtrar. |
 | `make status` | Mostra o estado e retorna erro se algum serviço estiver ausente ou indisponível. |
 | `make test` | Executa pytest com PostgreSQL e API reais e Vitest em contêineres temporários. |
-| `make benchmark` | Executa perguntas versionadas com Ollama real e imprime um relatório JSON. |
+| `make rebuild` | Reconstrói as imagens locais, atualiza os serviços e aguarda a prontidão. |
+| `make dev` | Inicia Vite com HMR e Uvicorn com recarga. |
+| `make dev-down` | Para o ambiente de desenvolvimento e preserva os volumes. |
+| `make seed` | Carrega o schema sintético vazio e preserva cargas existentes. |
+| `make seed-benchmark` | Prepara e audita o dataset científico isolado. |
+| `make snapshot` | Mostra hashes, contagens e compatibilidade em modo somente leitura. |
+| `make experiment-up` | Sobe o ambiente científico, verifica os serviços e informa a URL. |
+| `make experiment-down` | Para o ambiente científico e preserva seus volumes. |
+| `make models` | Lista modelos e tamanhos nos serviços Ollama ativos. |
+| `make benchmark` | Avalia um caso ou uma categoria e salva CSV e JSON. |
+| `make benchmark-all` | Avalia as 105 perguntas por modelo local compatível, sequencialmente. |
 
-O benchmark compara as linhas com consultas de referência executadas com `ai_query_reader` e mede também a classificação de perguntas ambíguas e sem resposta. O relatório inclui os modelos, a versão do prompt, a identificação do conjunto e das referências, latências, tokens disponíveis, rejeições, falhas e IDs de traces. As execuções são sequenciais e incluem a primeira chamada ao modelo. Para registrar repetições ou comparar modelos já instalados:
+Uma primeira rodada científica pode ser feita com uma única chamada ao modelo.
 
 ```sh
-make benchmark > benchmark.json
-make benchmark BENCHMARK_MODELS="qwen2.5:3b qwen2.5-coder:1.5b" BENCHMARK_REPEATS=2 > comparacao.json
+make experiment-up
+make snapshot
+make models
+make benchmark BENCHMARK_CASE=agg-01 BENCHMARK_REPEATS=1
+make experiment-down
 ```
+
+Use `BENCHMARK_CATEGORY` com o nome de uma categoria ou `BENCHMARK_CASE` com um ID. Sem filtro, `make benchmark` executa `agg-01`. `BENCHMARK_MODELS` recebe tags instaladas separadas por espaço. `BENCHMARK_REPEATS` controla as repetições e `BENCHMARK_OUTPUT` define a pasta de histórico, cujo padrão é `artifacts/benchmarks`. Cada rodada gera uma pasta exclusiva com métricas e IDs de trace. [Metodologia e operação científica](docs/experimental-evaluation.md)
 
 Para inspecionar um problema de inicialização, use `make status` e `make logs`. Se os serviços estiverem saudáveis mas o primeiro início demorar, ajuste o tempo de espera com `make up WAIT_TIMEOUT=900`.
 
@@ -87,6 +102,7 @@ Para inspecionar um problema de inicialização, use `make status` e `make logs`
 | `GET /health` | Confirma acesso ao PostgreSQL com o usuário leitor. |
 | `GET /api/schema` | Devolve as tabelas autorizadas, colunas, tipos e chaves. |
 | `GET /api/models` | Lista as tags instaladas no Ollama e o modelo padrão. |
+| `GET /api/evaluation/snapshot` | Informa em modo somente leitura a compatibilidade entre a carga atual e o manifesto científico. |
 | `POST /api/query/generate` | Gera uma consulta candidata sem executá-la. |
 | `POST /api/query` | Gera, valida e executa uma consulta com limites. |
 | `POST /api/query/stream` | Transmite as etapas via SSE e encerra com o resultado. |
@@ -99,14 +115,7 @@ curl --no-buffer --fail-with-body http://127.0.0.1:5173/api/query/stream \
 
 O SQLGlot permite um único `SELECT` com CTEs de leitura no catálogo autorizado. Escrita, DDL, `SELECT INTO`, múltiplas instruções, fontes externas e funções fora da lista são bloqueadas. A execução usa transação somente leitura, `statement_timeout` de 3 segundos e devolve até 100 linhas com indicação de truncamento. O prompt só é retornado à requisição que pedir `include_prompt: true`. O histórico guarda até 20 perguntas e metadados no navegador.
 
-Para editar a interface com recarga automática, com o stack em execução, use Node.js 22.13+ ou 24 LTS e npm:
-
-```sh
-npm --prefix frontend ci
-npm --prefix frontend run dev -- --port 5174 --strictPort
-```
-
-O Vite encaminha `/api` para `http://127.0.0.1:8000`. Se necessário, ajuste `AI_QUERY_API_TARGET`, `VITE_LANGFUSE_URL` e `VITE_LANGFUSE_PROJECT_ID` em `frontend/.env.local` usando [frontend/.env.example](frontend/.env.example) como referência. Use `npm --prefix frontend test` para a suíte local e `npm --prefix frontend run build` para tipar e gerar o build.
+Para editar com recarga automática, use `make dev` e abra [127.0.0.1:5173](http://127.0.0.1:5173). O Vite encaminha `/api` ao serviço `backend` e acompanha alterações em `frontend/src`. O Uvicorn acompanha os módulos Python montados. Os pacotes Node e Python ficam nas imagens. Rode `make dev` novamente ao alterar dependências. `make dev-down` para o stack e `make up` restaura a configuração normal nas mesmas portas do Playground. Use `make rebuild` para reconstruir e aplicar as imagens de produção de uma vez.
 
 ## Documentação
 
@@ -114,3 +123,7 @@ O Vite encaminha `/api` para `http://127.0.0.1:8000`. Se necessário, ajuste `AI
 - [Observabilidade e SSE](docs/observability.md)
 - [Roadmap](docs/roadmap.md)
 - [Progresso](docs/progress.md)
+
+## Avaliação Experimental
+
+A interface inclui uma suíte de 105 perguntas em português para comparar modelos por acerto, erros e latência, com exportação CSV e JSON. Por padrão, a avaliação compara as consultas sobre o banco atual. O modo científico verifica um snapshot versionado, cuja data de referência padrão é `2025-01-01`. Consulte a [metodologia e os comandos para criar o snapshot em um projeto isolado](docs/experimental-evaluation.md).

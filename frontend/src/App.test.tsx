@@ -26,14 +26,15 @@ function sse(event: string, data: unknown) {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
 }
 
-function fixture(stream: () => Response) {
-  const routes = vi.fn((url: string) => {
+function fixture(stream: () => Response, extra?: (url: string, request?: RequestInit) => Response) {
+  const routes = vi.fn((url: string, request?: RequestInit) => {
     if (url === '/api/schema') return Promise.resolve(Response.json({
       schema_name: 'ecommerce',
       tables: [{ name: 'orders', columns: [{ name: 'order_id', data_type: 'integer', nullable: false }], primary_key: ['order_id'], foreign_keys: [] }],
     }))
     if (url === '/api/models') return Promise.resolve(Response.json({ models: ['modelo-a', 'modelo-b'], default: 'modelo-a' }))
     if (url === '/api/query/stream') return Promise.resolve(stream())
+    if (extra) return Promise.resolve(extra(url, request))
     throw new Error('Rota inesperada')
   })
   vi.stubGlobal('fetch', routes)
@@ -135,3 +136,74 @@ describe('AI Query Playground', () => {
     expect(chartData({ columns: ['cidade', 'total'], rows: [['Curitiba', 3], ['Curitiba', 2]], truncated: false })).toBeUndefined()
   })
 })
+
+it('executa uma categoria da avaliação, compara modelos e exibe os detalhes da tentativa', async () => {
+  const caseData = {
+    id: 'agg-01', category: 'Agregações', complexity: 'básica', concept: 'Cardinalidade',
+    question, reference_sql: approved.generation?.sql, expected_status: 'generated',
+  }
+  const evaluated = vi.fn()
+  const fetchEvaluation = (url: string, request?: RequestInit) => {
+    if (url === '/api/evaluation/cases') return Response.json({
+      cases: [caseData], dataset_sha256: 'dataset',
+      scientific: { reference_date: '2025-01-01', seed_version: 'ecommerce-v1', snapshot_sha256: 'snapshot' },
+    })
+    if (url === '/api/evaluation/cases/agg-01/run') {
+      const { model, mode } = JSON.parse(request?.body as string)
+      evaluated(model, mode)
+      const correct = model === 'modelo-a'
+      return Response.json({
+        ...approved,
+        trace_id: correct ? trace : '02020304050607080102030405060708',
+        case: caseData,
+        dataset_sha256: 'dataset', snapshot_sha256: 'snapshot', mode,
+        expected_result: approved.result, outcome: correct ? 'correct' : 'result_mismatch',
+        latency_ms: 15, http_status: 200, model_requested: model,
+        usage: { input_tokens: 50, output_tokens: 11 },
+      })
+    }
+    throw new Error('Rota de avaliação inesperada.')
+  }
+  fixture(() => new Response(), fetchEvaluation)
+  fireEvent.click(screen.getByRole('button', { name: 'Avaliação Experimental' }))
+  expect(await screen.findByText('1 perguntas')).toBeTruthy()
+  fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Categoria' }))
+  fireEvent.click(await screen.findByRole('option', { name: 'Agregações' }))
+  fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Modelos' }))
+  fireEvent.click(await screen.findByRole('option', { name: 'modelo-b' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Executar categoria' }))
+
+  expect(await screen.findByText('Resultado divergente')).toBeTruthy()
+  expect(evaluated.mock.calls).toEqual([['modelo-a', 'dynamic'], ['modelo-b', 'dynamic']])
+  expect(screen.getByText('100.0%')).toBeTruthy()
+  expect(screen.getByText('0.0%')).toBeTruthy()
+  expect((screen.getByRole('button', { name: 'CSV' }) as HTMLButtonElement).disabled).toBe(false)
+  expect((screen.getByRole('button', { name: 'JSON' }) as HTMLButtonElement).disabled).toBe(false)
+  const [expand] = screen.getAllByRole('button', { name: 'Expand row' })
+  if (!expand) throw new Error('A tentativa não pode ser expandida.')
+  fireEvent.click(expand)
+  expect(await screen.findByText(/Cardinalidade · básica · Validação/)).toBeTruthy()
+  expect(screen.getByRole('link', { name: trace }).getAttribute('href')).toContain(trace)
+
+  const createObjectURL = vi.fn(() => 'blob:avaliacao')
+  vi.stubGlobal('URL', class extends URL {
+    static createObjectURL = createObjectURL
+    static revokeObjectURL = vi.fn()
+  })
+  const download = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+  try {
+    fireEvent.click(screen.getByRole('button', { name: 'CSV' }))
+    fireEvent.click(screen.getByRole('button', { name: 'JSON' }))
+    expect(createObjectURL.mock.calls).toEqual([[expect.any(Blob)], [expect.any(Blob)]])
+    expect(download.mock.instances.map((anchor) => (anchor as HTMLAnchorElement).download))
+      .toEqual(['avaliacao-experimental.csv', 'avaliacao-experimental.json'])
+  } finally {
+    download.mockRestore()
+  }
+  fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Modo de avaliação' }))
+  fireEvent.click(await screen.findByRole('option', { name: 'Científica — snapshot controlado' }))
+  expect(await screen.findByText('Data de referência 2025-01-01 · Seed ecommerce-v1')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Executar categoria' }))
+  expect(await screen.findByText('Resultado divergente')).toBeTruthy()
+  expect(evaluated.mock.calls.slice(2)).toEqual([['modelo-a', 'scientific'], ['modelo-b', 'scientific']])
+}, 20_000)

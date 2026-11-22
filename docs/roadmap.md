@@ -92,3 +92,13 @@ flowchart LR
 - Os rastros mostram versão do prompt, modelo, estado e duração por etapa concluída, sem conteúdo bruto de perguntas, prompts, SQL ou resultados na configuração padrão.
 - Com Langfuse indisponível, a API continua respondendo dentro dos limites definidos.
 - Um conjunto versionado de perguntas com resultados esperados mede acerto por equivalência de resultado, além de rejeições, falhas e latência. O roteiro mantém registrados o modelo, a versão do prompt e a versão da base usados na avaliação.
+
+### Avaliação experimental de Text-to-SQL
+
+**Implementado.** Suíte com 105 perguntas e 15 categorias teóricas sobre o schema real, snapshot determinístico verificado por hash, referência independente, comparação por multiconjunto ou sequência, tolerância numérica e verificações estruturais da AST. A página **Avaliação Experimental** executa perguntas ou categorias em modelos locais e exporta tentativas em CSV e JSON. O procedimento de reprodução e os critérios de pontuação estão na [metodologia experimental](experimental-evaluation.md).
+
+**Verificado.** As referências versionadas foram reproduzidas em PostgreSQL 18.6 com a carga sintética fixa. Os testes de integração cobrem classificação, resultado, construção SQL, rejeição pela política e divergência de snapshot. As métricas comparativas serão obtidas ao executar a suíte com os modelos reais.
+
+**Dois modos de avaliação.** A avaliação dinâmica usa o banco atual e calcula as referências na mesma transação do candidato. O modo científico preserva a conferência de hash e permite selecionar um manifesto versionado por configuração. A interface informa o modo, identifica os dados usados e apresenta tentativas com dados insuficientes.
+
+**Operação experimental.** O Makefile reúne os alvos de recarga local, reconstrução, seed protegida e operação científica por data. A auditoria confere o hash e as referências. O benchmark chama a API científica, aceita recortes e preserva o histórico em CSV e JSON. A rodada completa é explícita e percorre os modelos locais sequencialmente.

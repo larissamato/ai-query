@@ -46,6 +46,7 @@ class OllamaResponse(BaseModel):
 
 class OllamaModel(BaseModel):
     name: str
+    digest: str | None = None
 
 
 class OllamaModels(BaseModel):
@@ -53,6 +54,11 @@ class OllamaModels(BaseModel):
 
 
 class OllamaProvider:
+    generation_config = {
+        "stream": False, "think": False,
+        "options": {"temperature": 0, "num_ctx": 4096, "num_predict": 512},
+    }
+
     def __init__(
         self, base_url: str, model: str, timeout: float, transport: httpx.BaseTransport | None = None
     ) -> None:
@@ -60,6 +66,7 @@ class OllamaProvider:
         self.model = model
         self.timeout = httpx.Timeout(timeout, connect=min(timeout, 5))
         self.transport = transport
+        self.model_digest: str | None = None
 
     def list_models(self) -> list[str]:
         try:
@@ -69,6 +76,7 @@ class OllamaProvider:
             payload = OllamaModels.model_validate_json(response.content)
         except (httpx.HTTPError, ValidationError):
             raise LLMError("unavailable") from None
+        self.model_digest = next((model.digest for model in payload.models if model.name == self.model), None)
         return sorted({model.name for model in payload.models})
 
     def complete(self, messages: list[Message], response_schema: dict) -> Completion:
@@ -82,9 +90,7 @@ class OllamaProvider:
                         "model": self.model,
                         "messages": messages,
                         "format": response_schema,
-                        "stream": False,
-                        "think": False,
-                        "options": {"temperature": 0, "num_ctx": 4096, "num_predict": 512},
+                        **self.generation_config,
                     },
                 )
                 response.raise_for_status()

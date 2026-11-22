@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     ollama_model: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)] = (
         "qwen2.5:3b"
     )
+    evaluation_snapshot_path: Path | None = None
     ollama_timeout_seconds: float = Field(default=120, gt=0, le=600)
 
 

@@ -236,3 +236,54 @@ button, textarea { font: inherit; }
     flex-basis: 100%;
   }
 }
+
+.math-library > summary {
+  padding: 14px 17px;
+  font-size: 15px;
+  font-weight: 690;
+  cursor: pointer;
+}
+.math-library > summary::marker { color: var(--accent); }
+.math-library-body { display: grid; gap: 16px; padding: 0 17px 17px; }
+.math-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 126px), 1fr));
+  gap: 8px;
+}
+.math-cards button, .math-questions button {
+  padding: 9px;
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.math-cards button {
+  display: grid;
+  grid-template-rows: auto minmax(2.5em, auto) auto auto 1fr;
+  justify-items: center;
+  align-items: start;
+  gap: 4px;
+  font-size: 13px;
+  line-height: 1.25;
+}
+.math-cards button:hover, .math-questions button:hover { border-color: var(--muted); }
+.math-cards button[aria-pressed="true"], .math-questions button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+.math-logical, .math-notation, .math-sets dt { color: var(--accent); font-family: var(--mono); }
+.math-notation { font-size: 11px; }
+.math-description { color: var(--muted); font-size: 12px; }
+.venn-diagram { display: block; width: 100%; max-width: 120px; height: auto; }
+.venn-fill { fill: var(--accent); opacity: .42; }
+.venn-outline { fill: none; stroke: var(--muted); stroke-width: 1.25; }
+.venn-diagram text { fill: currentColor; font: 700 11px var(--mono); text-anchor: middle; }
+.math-library h3 { margin: 0 0 5px; font-size: 14px; }
+.math-explanation { border-inline-start: 2px solid var(--accent); padding-inline-start: 10px; font-size: 13px; }
+.math-explanation p + p { margin-top: 5px; }
+.math-questions { display: grid; gap: 5px; list-style: none; padding: 0; margin: 8px 0; }
+.math-questions button { width: 100%; text-align: start; font-size: 13px; }
+.math-sets { display: grid; gap: 4px; margin: 8px 0; font-size: 13px; }
+.math-sets > div { display: grid; grid-template-columns: 1em 1fr; gap: 8px; }
+.math-sets dd { margin: 0; }

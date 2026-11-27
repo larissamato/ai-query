@@ -79,6 +79,7 @@ flowchart LR
 - O estudante consegue enviar uma pergunta e ver o estado de carregamento, as etapas em ordem e o SQL candidato.
 - O resultado mostra colunas e linhas, com indicação de conjunto vazio ou truncamento quando aplicável.
 - Uma rejeição mostra seu motivo, identifica a etapa que falhou e indica que a execução foi pulada. A interface permite enviar outra pergunta após o erro.
+- A biblioteca didática do Playground apresenta cinco operações com diagramas de Venn e relaciona predicados booleanos à álgebra relacional. A seleção de um exemplo preenche a pergunta editável e mantém a execução sob controle do usuário.
 
 ## 5. Observabilidade e avaliação acadêmica
 

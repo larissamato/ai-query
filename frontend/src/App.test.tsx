@@ -114,6 +114,31 @@ describe('AI Query Playground', () => {
     expect(JSON.parse(payload[1].body as string)).toMatchObject({ model: 'modelo-b', question })
   }, 15_000)
 
+  it('insere um exemplo matemático editável e só envia a pergunta ao executar', async () => {
+    const routes = fixture(() => new Response(sse('result', {
+      http_status: 200, response: approved,
+    }), { headers: { 'Content-Type': 'text/event-stream' } }))
+
+    fireEvent.click(screen.getByText('Explorando a matemática por meio do SQL'))
+    fireEvent.click(screen.getByRole('button', { name: 'XOR — Diferença simétrica' }))
+    const example = screen.getByRole('button', { name: /mas não atendem às duas condições/ })
+    fireEvent.click(example)
+    const input = screen.getByLabelText<HTMLTextAreaElement>('Pergunta em linguagem natural')
+    expect(input.value).toBe(example.textContent)
+    expect(screen.getByText('Produtos com preço acima de R$ 500.')).toBeTruthy()
+    expect(screen.getByText('Produtos da categoria Eletrônicos.')).toBeTruthy()
+    expect(routes.mock.calls.some(([url]) => url === '/api/query/stream')).toBe(false)
+
+    const edited = input.value.replace('R$ 500', 'R$ 300')
+    fireEvent.change(input, { target: { value: edited } })
+    const run = screen.getByRole<HTMLButtonElement>('button', { name: /Executar consulta/ })
+    await waitFor(() => expect(run.disabled).toBe(false))
+    fireEvent.click(run)
+    expect(await screen.findByText('1000')).toBeTruthy()
+    const request = routes.mock.calls.find(([url]) => url === '/api/query/stream')?.[1]
+    expect(JSON.parse(request?.body as string)).toMatchObject({ question: edited })
+  }, 15_000)
+
   it('exibe rejeição da política e permite tentar outra consulta', async () => {
     fixture(() => new Response(sse('result', {
       http_status: 422,

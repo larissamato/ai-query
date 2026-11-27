@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { getModels, getSchema, streamQuery } from './api'
 import { Evaluation } from './components/Evaluation'
 import { Processing } from './components/Processing'
+import { MathLibrary } from './components/MathLibrary'
 import { QueryInput } from './components/QueryInput'
 import { QueryOutput } from './components/QueryOutput'
 import { Workspace } from './components/Workspace'
@@ -158,6 +159,7 @@ export default function App() {
             <QueryInput question={question} onQuestion={setQuestion} selected={selected} onModel={setModel}
               models={models.data} modelLoading={models.loading} modelError={models.error}
               onRetryModels={models.retry} running={running} onRun={() => void run()} />
+            <MathLibrary onQuestion={setQuestion} />
             {error && <Alert type="error" showIcon title="Consulta interrompida" description={error} />}
             <QueryOutput response={response} running={running} />
           </div>
